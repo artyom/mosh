@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strconv"
 	"syscall"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -29,13 +30,15 @@ func main() {
 		defaultPorts = "60000:60050"
 	}
 	params := struct {
-		SSHPort   int    `flag:"sshport,ssh port to use"`
-		Login     string `flag:"l,login"`
-		MoshPorts string `flag:"p,server-side UDP port or colon-separated range"`
+		SSHPort   int           `flag:"sshport,ssh port to use"`
+		Login     string        `flag:"l,login"`
+		MoshPorts string        `flag:"p,server-side UDP port or colon-separated range"`
+		Timeout   time.Duration `flag:"timeout,ssh connect timeout"`
 	}{
 		SSHPort:   22,
 		Login:     defaultUser,
 		MoshPorts: defaultPorts,
+		Timeout:   5 * time.Second,
 	}
 	autoflags.Define(&params)
 	flag.Parse()
@@ -56,7 +59,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	port, key, err := runServer(addr, params.Login, params.MoshPorts, params.SSHPort)
+	port, key, err := runServer(addr, params.Login, params.MoshPorts, params.SSHPort, params.Timeout)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -65,9 +68,9 @@ func main() {
 	log.Fatal(syscall.Exec(clientPath, []string{"mosh-client", ips[0].String(), strconv.Itoa(port)}, newEnv))
 }
 
-func runServer(addr, login, moshPorts string, port int) (int, string, error) {
+func runServer(addr, login, moshPorts string, port int, tout time.Duration) (int, string, error) {
 	var sshAgent agent.Agent
-	agentConn, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK"))
+	agentConn, err := net.DialTimeout("unix", os.Getenv("SSH_AUTH_SOCK"), tout)
 	if err != nil {
 		return 0, "", err
 	}
