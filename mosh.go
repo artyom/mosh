@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"flag"
 	"fmt"
@@ -69,6 +70,10 @@ func main() {
 }
 
 func runServer(addr, login, moshPorts string, port int, tout time.Duration) (int, string, error) {
+	hostKeyCallback, err := knownHostsKeyMatch(os.ExpandEnv("$HOME/.ssh/known_hosts"))
+	if err != nil {
+		return 0, "", err
+	}
 	var sshAgent agent.Agent
 	agentConn, err := net.DialTimeout("unix", os.Getenv("SSH_AUTH_SOCK"), tout)
 	if err != nil {
@@ -82,8 +87,9 @@ func runServer(addr, login, moshPorts string, port int, tout time.Duration) (int
 		return 0, "", err
 	}
 	sshConfig := &ssh.ClientConfig{
-		User: login,
-		Auth: []ssh.AuthMethod{ssh.PublicKeys(signers...)},
+		User:            login,
+		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signers...)},
+		HostKeyCallback: hostKeyCallback,
 	}
 	client, err := sshDial("tcp", net.JoinHostPort(addr, strconv.Itoa(port)), sshConfig)
 	if err != nil {
@@ -128,4 +134,36 @@ func init() {
 		fmt.Fprintln(os.Stderr, "Usage: mosh [flags] hostname")
 		flag.PrintDefaults()
 	}
+}
+
+func knownHostsKeyMatch(name string) (ssh.HostKeyCallback, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	m := make(map[string]struct{})
+	scanner := bufio.NewScanner(f)
+	var lineNo int
+	for scanner.Scan() {
+		lineNo++
+		if bytes.HasPrefix(scanner.Bytes(), []byte("#")) {
+			continue
+		}
+		_, _, key, _, _, err := ssh.ParseKnownHosts(scanner.Bytes())
+		if err != nil {
+			return nil, fmt.Errorf("line %d: %v", lineNo, err)
+		}
+		m[ssh.FingerprintSHA256(key)] = struct{}{}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		fp := ssh.FingerprintSHA256(key)
+		if _, ok := m[fp]; ok {
+			return nil
+		}
+		return fmt.Errorf("key %q for %q not found in known_hosts", fp, hostname)
+	}, nil
 }
