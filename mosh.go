@@ -2,7 +2,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"flag"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
+	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/net/proxy"
 
 	"github.com/artyom/autoflags"
@@ -70,7 +70,7 @@ func main() {
 }
 
 func runServer(addr, login, moshPorts string, port int, tout time.Duration) (int, string, error) {
-	hostKeyCallback, err := knownHostsKeyMatch(os.ExpandEnv("$HOME/.ssh/known_hosts"))
+	hostKeyCallback, err := knownhosts.New(os.ExpandEnv("$HOME/.ssh/known_hosts"))
 	if err != nil {
 		return 0, "", err
 	}
@@ -134,36 +134,4 @@ func init() {
 		fmt.Fprintln(os.Stderr, "Usage: mosh [flags] hostname")
 		flag.PrintDefaults()
 	}
-}
-
-func knownHostsKeyMatch(name string) (ssh.HostKeyCallback, error) {
-	f, err := os.Open(name)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	m := make(map[string]struct{})
-	scanner := bufio.NewScanner(f)
-	var lineNo int
-	for scanner.Scan() {
-		lineNo++
-		if bytes.HasPrefix(scanner.Bytes(), []byte("#")) {
-			continue
-		}
-		_, _, key, _, _, err := ssh.ParseKnownHosts(scanner.Bytes())
-		if err != nil {
-			return nil, fmt.Errorf("line %d: %v", lineNo, err)
-		}
-		m[ssh.FingerprintSHA256(key)] = struct{}{}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-		fp := ssh.FingerprintSHA256(key)
-		if _, ok := m[fp]; ok {
-			return nil
-		}
-		return fmt.Errorf("key %q for %q not found in known_hosts", fp, hostname)
-	}, nil
 }
