@@ -87,8 +87,9 @@ func runServer(addr, login, moshPorts string, port int, tout time.Duration) (int
 		return 0, "", err
 	}
 	sshConfig := &ssh.ClientConfig{
-		User:            login,
-		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signers...)},
+		User: login,
+		Auth: []ssh.AuthMethod{ssh.PublicKeys(signers...),
+			ssh.KeyboardInteractive(keyboardChallenge)},
 		HostKeyCallback: hostKeyCallback,
 	}
 	client, err := sshDial("tcp", net.JoinHostPort(addr, strconv.Itoa(port)), sshConfig)
@@ -130,8 +131,27 @@ func sshDial(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error
 
 func init() {
 	log.SetFlags(0)
+	log.SetPrefix("mosh: ")
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: mosh [flags] hostname")
 		flag.PrintDefaults()
 	}
+}
+
+func keyboardChallenge(user, instruction string, questions []string, echos []bool) (answers []string, err error) {
+	if len(questions) != 0 {
+		return nil, fmt.Errorf("keyboard interactive challenge is not supported")
+	}
+	// https://godoc.org/golang.org/x/crypto/ssh#KeyboardInteractiveChallenge
+	//
+	// After successful authentication, the server may send
+	// a challenge with no questions, for which the user and
+	// instruction messages should be printed.
+	if user != "" {
+		log.Println(user)
+	}
+	if instruction != "" {
+		log.Println(instruction)
+	}
+	return nil, nil
 }
