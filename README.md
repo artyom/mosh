@@ -10,6 +10,6 @@ Supported environment variables:
 * `MOSH_USER` — default user when doing ssh connection;
 * `MOSH_PORTS` - port or colon-separated port range to start mosh-server with.
 
-Authentication is performed using ssh-agent, it's socket is expected to be available at `SSH_AUTH_SOCK`.
+Authentication is performed using ssh-agent, its socket is expected to be available at `SSH_AUTH_SOCK`.
 
 **LICENSE**: MIT
