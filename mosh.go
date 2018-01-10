@@ -16,6 +16,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
+	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/net/proxy"
 
 	"github.com/artyom/autoflags"
@@ -102,7 +103,11 @@ func runServer(addr, login, moshPorts string, port int, tout time.Duration) (int
 		return 0, "", err
 	}
 	defer session.Close()
-	if err := session.RequestPty(os.Getenv("TERM"), 80, 25, make(ssh.TerminalModes)); err != nil {
+	width, height := 80, 25
+	if w, h, err := terminal.GetSize(0); err == nil {
+		width, height = w, h
+	}
+	if err := session.RequestPty(os.Getenv("TERM"), height, width, make(ssh.TerminalModes)); err != nil {
 		return 0, "", err
 	}
 	rdata, err := session.CombinedOutput("mosh-server new -p " + moshPorts)
