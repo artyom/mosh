@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -115,10 +117,26 @@ func runServer(addr, login, moshPorts string, port int, tout time.Duration) (int
 		os.Stderr.Write(rdata)
 		return 0, "", err
 	}
-	var moshPort int
-	var moshKey string
-	_, err = fmt.Fscanf(bytes.NewReader(rdata), "\nMOSH CONNECT %d %s\n", &moshPort, &moshKey)
-	return moshPort, moshKey, err
+	return parsePortKey(rdata)
+}
+
+func parsePortKey(b []byte) (port int, key string, err error) {
+	for s := bufio.NewScanner(bytes.NewReader(b)); s.Scan(); {
+		if !bytes.HasPrefix(s.Bytes(), []byte("MOSH CONNECT")) {
+			continue
+		}
+		fields := strings.Fields(s.Text())
+		if len(fields) != 4 {
+			return 0, "", fmt.Errorf("unexpected response line from mosh-server: %q", s.Text())
+		}
+		port, err = strconv.Atoi(fields[2])
+		if err != nil {
+			return 0, "", err
+		}
+		key = fields[3]
+		return port, key, nil
+	}
+	return 0, "", fmt.Errorf("no 'MOSH CONNECT' line from mosh-server")
 }
 
 func sshDial(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
