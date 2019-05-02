@@ -4,6 +4,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -95,7 +96,7 @@ func runServer(addr, login, moshPorts string, port int, tout time.Duration) (int
 			ssh.KeyboardInteractive(keyboardChallenge)},
 		HostKeyCallback: hostKeyCallback,
 	}
-	client, err := sshDial("tcp", net.JoinHostPort(addr, strconv.Itoa(port)), sshConfig)
+	client, err := sshDial("tcp", net.JoinHostPort(addr, strconv.Itoa(port)), tout, sshConfig)
 	if err != nil {
 		return 0, "", err
 	}
@@ -139,9 +140,10 @@ func parsePortKey(b []byte) (port int, key string, err error) {
 	return 0, "", fmt.Errorf("no 'MOSH CONNECT' line from mosh-server")
 }
 
-func sshDial(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
-	proxyDialer := proxy.FromEnvironment()
-	conn, err := proxyDialer.Dial(network, addr)
+func sshDial(network, addr string, timeout time.Duration, config *ssh.ClientConfig) (*ssh.Client, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	conn, err := proxy.Dial(ctx, network, addr)
 	if err != nil {
 		return nil, err
 	}
